@@ -1,0 +1,36 @@
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import type { Metadata } from "next";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "DocuMind - IA para tus documentos",
+  description: "Analiza y chatea con tus PDFs, Word y archivos de texto",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    // Se añade suppressHydrationWarning para ignorar cambios de atributos por extensiones
+    // Se cambia lang a "es" para coincidir con el idioma de tu interfaz
+    <html lang="es" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
