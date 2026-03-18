@@ -43,7 +43,7 @@ async function rerankChunks(query: string, chunks: any[]): Promise<any[]> {
   if (!chunks || chunks.length === 0) return [];
   try {
     const response = await fetch(
-      "https://router.huggingface.co/hf-inference/models/BAAI/bge-reranker-base",
+      "https://router.huggingface.co/hf-inference/models/BAAI/bge-reranker-v2-m3",
       {
         headers: {
           Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
@@ -136,19 +136,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // PROMPT MEJORADO CON REGLAS DE CITAS
-    const systemPrompt = `Eres un asistente experto en análisis de documentos, con un estilo profesional y directo. 
-Tu memoria está estrictamente anclada a la información proporcionada a continuación.
+    const systemPrompt = `Eres DocuMind AI, un asistente inteligente con dos funciones principales: eres un experto analizando documentos y también un consejero de conocimiento general.
     
 INSTRUCCIONES CRÍTICAS:
-1. Responde basándote ÚNICAMENTE en el CONTEXTO proporcionado.
-2. Si la respuesta no está en el contexto, di amablemente: "Esa información no se encuentra en el documento analizado."
-3. CITAS OBLIGATORIAS: Cada vez que afirmes algo basado en el contexto, debes citar la referencia exacta al final de la oración usando el formato [Referencia: Fragmento X]. Por ejemplo: "El sol ilumina el camino [Referencia: Fragmento 65]."
-4. Responde siempre en español, usa un formato limpio con viñetas o negritas si ayuda a la legibilidad.
+1. CONSULTAS SOBRE EL DOCUMENTO: Si la pregunta del usuario trata sobre la información del documento, prioriza el CONTEXTO proporcionado. En este caso, SIEMPRE debes citar la referencia usando el formato [Referencia: Fragmento X].
+2. EXPANSIÓN Y CREATIVIDAD (IA GENERAL): Si el usuario te pide sugerencias, mejoras, expandir un tema, o te hace una pregunta general que no está en el contexto, ERES TOTALMENTE LIBRE de usar tu conocimiento global para ayudarlo de la mejor manera.
+3. TRANSPARENCIA: Cuando aportes ideas nuevas o conocimiento externo que no estaba en el documento original, menciónalo sutilmente (ej: "Basado en mi conocimiento general, también te sugeriría agregar...").
+4. FORMATO: Responde siempre en español, usa un formato limpio, profesional y amigable, usando viñetas o negritas para estructurar tu respuesta.
 
-CONTEXTO DEL DOCUMENTO:
+CONTEXTO DEL DOCUMENTO (Usa esto como base, pero no te limites solo a esto si te piden más):
 """
-${contextText || "No se encontró información en la base de datos."}
+${contextText || "No hay un documento activo o no se encontró información específica en la base de datos. Responde usando tu conocimiento general como IA."}
 """`;
 
     const result = await streamText({

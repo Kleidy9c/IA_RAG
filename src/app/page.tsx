@@ -12,6 +12,10 @@ import {
   Trash2,
   Plus,
   Paperclip,
+  Download,
+  Copy,
+  Edit2,
+  Check,
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 
@@ -35,6 +39,11 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState("");
+
+  // ESTADOS PARA NUEVAS FUNCIONALIDADES
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>("");
@@ -149,15 +158,16 @@ export default function Home() {
     }
   };
 
-  const sendMessage = async (e: FormEvent) => {
-    e.preventDefault();
+  const sendMessage = async (e?: FormEvent, overrideContent?: string) => {
+    if (e) e.preventDefault();
     const currentSession = sessions.find((s) => s.id === activeSessionId);
-    if (!input.trim() || isLoading || !currentSession) return;
+    const textToSend = overrideContent || input;
+    if (!textToSend.trim() || isLoading || !currentSession) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: textToSend,
     };
     const currentMessages = [...currentSession.messages, userMsg];
 
@@ -226,11 +236,52 @@ export default function Home() {
     }
   };
 
+  // FUNCIONES DE SOPORTE
+  const exportChat = () => {
+    if (!activeSession || activeSession.messages.length === 0) return;
+    let content = `# DocuMind AI - Exportación\n\n`;
+    activeSession.messages.forEach((m) => {
+      content += `**${m.role === "user" ? "Tú" : "IA"}:**\n${m.content}\n\n---\n\n`;
+    });
+    const blob = new Blob([content], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Chat_${activeSession.title}.md`;
+    a.click();
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleEdit = (m: Message) => {
+    setEditingMessageId(m.id);
+    setEditValue(m.content);
+  };
+
+  const saveEdit = () => {
+    if (!activeSession || !editingMessageId) return;
+    const msgIndex = activeSession.messages.findIndex(
+      (m) => m.id === editingMessageId,
+    );
+    const newHistory = activeSession.messages.slice(0, msgIndex);
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId ? { ...s, messages: newHistory } : s,
+      ),
+    );
+    const textToResend = editValue;
+    setEditingMessageId(null);
+    sendMessage(undefined, textToResend);
+  };
+
   if (!mounted || !activeSession) return null;
 
   return (
     <div className="flex h-[100dvh] bg-white text-[#1f1f1f] overflow-hidden relative font-sans">
-      {/* OVERLAY PARA MÓVILES */}
       {isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/20 z-20 lg:hidden transition-opacity"
@@ -238,7 +289,6 @@ export default function Home() {
         />
       )}
 
-      {/* SIDEBAR GEMINI STYLE */}
       <aside
         className={`fixed lg:relative inset-y-0 left-0 z-30 w-[280px] bg-[#f0f4f9] flex flex-col transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
       >
@@ -289,7 +339,6 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* ÁREA PRINCIPAL */}
       <main className="flex-1 flex flex-col min-w-0 bg-white relative w-full h-[100dvh]">
         <header className="h-16 flex items-center justify-between px-4 lg:px-6 shrink-0">
           <div className="flex items-center gap-2">
@@ -307,6 +356,15 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
+            {activeSession.messages.length > 0 && (
+              <button
+                onClick={exportChat}
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+                title="Exportar"
+              >
+                <Download size={20} />
+              </button>
+            )}
             <label
               htmlFor="file-upload"
               className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold cursor-pointer transition-all shrink-0 ${activeSession.documentId ? "bg-blue-50 border border-blue-200 text-blue-700" : "bg-blue-600 text-white"}`}
@@ -358,19 +416,52 @@ export default function Home() {
                 key={m.id}
                 className={`flex w-full ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                {/* MENSAJE USUARIO - Estilo burbuja limpia derecha */}
                 {m.role === "user" ? (
-                  <div className="max-w-[85%] bg-[#f0f4f9] text-[#1f1f1f] px-5 py-3.5 rounded-[24px] rounded-tr-sm text-[15px] leading-relaxed">
-                    {m.content}
+                  <div className="group relative max-w-[85%]">
+                    {editingMessageId === m.id ? (
+                      <div className="bg-[#f0f4f9] p-4 rounded-2xl min-w-[280px]">
+                        <textarea
+                          className="w-full bg-transparent outline-none resize-none text-[15px]"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          autoFocus
+                          rows={3}
+                        />
+                        <div className="flex justify-end gap-2 mt-2">
+                          <button
+                            onClick={() => setEditingMessageId(null)}
+                            className="text-xs text-gray-500"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={saveEdit}
+                            className="text-xs text-blue-600 font-bold"
+                          >
+                            Re-enviar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-[#f0f4f9] text-[#1f1f1f] px-5 py-3.5 rounded-[24px] rounded-tr-sm text-[15px] leading-relaxed">
+                        {m.content}
+                        <button
+                          onClick={() => handleEdit(m)}
+                          className="absolute -left-8 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-600 transition-all"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  /* MENSAJE IA - Estilo texto plano izquierda con icono Sparkle */
-                  <div className="flex gap-4 max-w-[95%] sm:max-w-[85%] animate-in fade-in slide-in-from-bottom-2">
+                  /* DISEÑO DE CARTULINA PARA LA IA */
+                  <div className="flex gap-4 max-w-[95%] sm:max-w-[85%] animate-in fade-in slide-in-from-bottom-2 group">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                       <Sparkles size={24} className="text-blue-600" />
                     </div>
-                    <div className="text-[15px] leading-relaxed text-[#1f1f1f] pt-1">
-                      <div className="whitespace-pre-wrap">
+                    <div className="relative flex-1 bg-[#f8faff] border border-blue-100 shadow-sm rounded-2xl p-4 sm:p-5 transition-all hover:shadow-md">
+                      <div className="text-[15px] leading-relaxed text-[#1f1f1f] whitespace-pre-wrap">
                         {m.content || (
                           <div className="flex gap-1.5 pt-2">
                             <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
@@ -379,6 +470,23 @@ export default function Home() {
                           </div>
                         )}
                       </div>
+
+                      {/* ICONO DE COPIAR INTEGRADO EN LA CARTULINA */}
+                      {m.content && (
+                        <button
+                          onClick={() => copyToClipboard(m.content, m.id)}
+                          className="absolute bottom-2 right-2 p-2 rounded-lg hover:bg-blue-50 text-gray-400 transition-colors"
+                        >
+                          {copiedId === m.id ? (
+                            <Check size={16} className="text-green-500" />
+                          ) : (
+                            <Copy
+                              size={16}
+                              className="group-hover:text-blue-500"
+                            />
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -388,18 +496,15 @@ export default function Home() {
           </div>
         </div>
 
-        {/* INPUT FIJO ESTILO GEMINI */}
         <div className="absolute bottom-0 w-full bg-gradient-to-t from-white via-white to-transparent pt-10 pb-[env(safe-area-inset-bottom,24px)] px-4">
           <div className="max-w-3xl mx-auto">
             <form
               onSubmit={sendMessage}
               className="flex items-end gap-2 bg-[#f0f4f9] rounded-[28px] pl-4 pr-2 py-2 focus-within:ring-1 ring-gray-200 transition-all shadow-sm"
             >
-              {/* Botón de Upload integrado en el input */}
               <label
                 htmlFor="file-upload"
                 className={`p-2.5 rounded-full cursor-pointer transition-colors shrink-0 mb-0.5 flex items-center justify-center ${activeSession.documentId ? "text-blue-600 hover:bg-blue-50" : "text-gray-500 hover:bg-gray-200"}`}
-                title="Adjuntar archivo"
               >
                 {isUploading ? (
                   <Loader2 size={20} className="animate-spin" />
@@ -417,7 +522,6 @@ export default function Home() {
                 accept=".pdf,.docx,.txt,image/png,image/jpeg,image/webp"
                 disabled={isUploading}
               />
-
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -435,11 +539,10 @@ export default function Home() {
                 className="flex-1 bg-transparent border-none outline-none py-3 px-2 resize-none max-h-48 min-h-[48px] text-[15px] text-[#1f1f1f] placeholder:text-gray-500 custom-scrollbar"
                 rows={1}
               />
-
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading}
-                className="p-3 rounded-full text-gray-500 hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent transition-all mb-0.5 shrink-0"
+                className="p-3 rounded-full text-gray-500 hover:bg-gray-200 disabled:opacity-40 transition-all mb-0.5 shrink-0"
               >
                 {isLoading ? (
                   <Loader2 size={20} className="animate-spin text-blue-600" />
