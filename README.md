@@ -102,5 +102,3 @@ Verificación: Revisa las citas al final de las frases para confirmar la veracid
 [ ] Soporte para carpetas y organización de archivos masiva.
 
 Creado con ❤️ por José Marcos Fuentes Segarte - 2026.
-
-aparte de preguntarle de documentos que tenga tambien busqueda global, es decir que amplie el conocimiento sobre que puede agregar al documento o que puede cambiar tambien
