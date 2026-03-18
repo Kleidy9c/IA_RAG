@@ -1,6 +1,9 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import type { Metadata } from "next";
+// 1. Importamos el proveedor de Clerk y la localización
+import { ClerkProvider } from "@clerk/nextjs";
+import { esES } from "@clerk/localizations";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,14 +26,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // Se añade suppressHydrationWarning para ignorar cambios de atributos por extensiones
-    // Se cambia lang a "es" para coincidir con el idioma de tu interfaz
-    <html lang="es" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
-    </html>
+    // 2. Envolvemos todo el contenido con ClerkProvider
+    <ClerkProvider localization={esES}>
+      <html lang="es" suppressHydrationWarning>
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

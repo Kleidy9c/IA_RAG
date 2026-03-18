@@ -4,16 +4,16 @@ import {
   Send,
   Upload,
   Loader2,
-  Bot,
-  User,
-  Plus,
+  Sparkles,
   Menu,
   X,
   CheckCircle2,
   MessageSquare,
   Trash2,
-  File,
+  Plus,
+  Paperclip,
 } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 
 interface Message {
   id: string;
@@ -31,7 +31,7 @@ interface ChatSession {
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Por defecto cerrado en móvil
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState("");
@@ -41,7 +41,7 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("documind_v2");
+    const saved = localStorage.getItem("documind_v3");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -54,14 +54,13 @@ export default function Home() {
       }
     } else initialSession();
 
-    // Si estamos en PC, abrimos el sidebar al cargar
     if (window.innerWidth >= 1024) setIsSidebarOpen(true);
     setMounted(true);
   }, []);
 
   useEffect(() => {
     if (mounted && sessions.length > 0)
-      localStorage.setItem("documind_v2", JSON.stringify(sessions));
+      localStorage.setItem("documind_v3", JSON.stringify(sessions));
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [sessions, mounted]);
 
@@ -84,7 +83,7 @@ export default function Home() {
     setSessions((prev) => [
       {
         id: newId,
-        title: "Nueva consulta",
+        title: "Nuevo Chat",
         documentId: null,
         fileName: null,
         messages: [],
@@ -134,7 +133,7 @@ export default function Home() {
                     {
                       id: Date.now().toString(),
                       role: "assistant",
-                      content: `✅ He analizado **${file.name}**. ¿Qué información necesitas buscar en él?`,
+                      content: `Documento **${file.name}** cargado y analizado en mi memoria. ¿Qué te gustaría saber sobre él?`,
                     },
                   ],
                 }
@@ -230,48 +229,41 @@ export default function Home() {
   if (!mounted || !activeSession) return null;
 
   return (
-    <div className="flex h-[100dvh] bg-[#f9fafb] text-gray-800 overflow-hidden relative">
-      {/* OVERLAY PARA MÓVILES CUANDO EL SIDEBAR ESTÁ ABIERTO */}
+    <div className="flex h-[100dvh] bg-white text-[#1f1f1f] overflow-hidden relative font-sans">
+      {/* OVERLAY PARA MÓVILES */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-black/20 z-20 lg:hidden transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* SIDEBAR RESPONSIVO */}
+      {/* SIDEBAR GEMINI STYLE */}
       <aside
-        className={`fixed lg:relative inset-y-0 left-0 z-30 w-80 bg-[#0f172a] text-gray-300 flex flex-col transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 shadow-2xl lg:shadow-none`}
+        className={`fixed lg:relative inset-y-0 left-0 z-30 w-[280px] bg-[#f0f4f9] flex flex-col transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
       >
-        <div className="p-6 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-white text-xl">
-            <div className="bg-blue-600 p-1.5 rounded-lg">
-              <File size={20} />
-            </div>
-            <span>DocuMind</span>
-          </div>
+        <div className="p-4 flex items-center justify-between">
           <button
             onClick={() => setIsSidebarOpen(false)}
-            className="lg:hidden text-gray-400 hover:text-white p-2"
+            className="lg:hidden p-2 hover:bg-black/5 rounded-full text-gray-600"
           >
-            <X size={24} />
+            <Menu size={24} />
           </button>
         </div>
 
-        <button
-          onClick={createNewChat}
-          className="mx-4 mb-6 flex items-center justify-center gap-3 bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-all text-white font-medium border border-white/10 group"
-        >
-          <Plus
-            size={20}
-            className="text-blue-400 group-hover:scale-110 transition-transform"
-          />{" "}
-          Nuevo Chat
-        </button>
+        <div className="px-4 mb-4">
+          <button
+            onClick={createNewChat}
+            className="flex items-center gap-3 bg-white hover:bg-gray-50 text-[#1f1f1f] px-4 py-3 rounded-full shadow-sm border border-gray-100 transition-all font-medium text-sm w-max"
+          >
+            <Plus size={20} className="text-gray-600" />
+            Nuevo Chat
+          </button>
+        </div>
 
-        <div className="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar pb-6">
-          <p className="px-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">
-            Historial
+        <div className="flex-1 overflow-y-auto px-3 space-y-0.5 custom-scrollbar pb-6 mt-4">
+          <p className="px-3 text-xs font-semibold text-gray-500 mb-2">
+            Recientes
           </p>
           {sessions.map((s) => (
             <div
@@ -280,24 +272,15 @@ export default function Home() {
                 setActiveSessionId(s.id);
                 if (window.innerWidth < 1024) setIsSidebarOpen(false);
               }}
-              className={`group flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all ${activeSessionId === s.id ? "bg-blue-600/20 text-blue-400 border border-blue-500/30" : "hover:bg-white/5 text-gray-400"}`}
+              className={`group flex items-center justify-between p-3 rounded-full cursor-pointer transition-colors ${activeSessionId === s.id ? "bg-[#d3e3fd] text-[#041e49]" : "hover:bg-black/5 text-[#444746]"}`}
             >
               <div className="flex items-center gap-3 overflow-hidden">
-                <MessageSquare size={18} className="shrink-0" />
-                <div className="flex flex-col truncate">
-                  <span className="text-sm truncate font-medium">
-                    {s.title}
-                  </span>
-                  {s.fileName && (
-                    <span className="text-[10px] opacity-60 truncate">
-                      📄 {s.fileName}
-                    </span>
-                  )}
-                </div>
+                <MessageSquare size={16} className="shrink-0" />
+                <span className="text-sm truncate font-medium">{s.title}</span>
               </div>
               <button
                 onClick={(e) => deleteChat(s.id, e)}
-                className="opacity-0 lg:group-hover:opacity-100 opacity-100 lg:opacity-0 hover:text-red-400 transition-all p-2"
+                className="opacity-0 lg:group-hover:opacity-100 opacity-100 lg:opacity-0 hover:text-red-500 transition-all p-1.5"
               >
                 <Trash2 size={16} />
               </button>
@@ -308,130 +291,171 @@ export default function Home() {
 
       {/* ÁREA PRINCIPAL */}
       <main className="flex-1 flex flex-col min-w-0 bg-white relative w-full h-[100dvh]">
-        <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b bg-white/80 backdrop-blur-md shrink-0">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="lg:hidden p-2 -ml-2 hover:bg-gray-100 rounded-lg text-gray-600"
+        <header className="h-16 flex items-center justify-between px-4 lg:px-6 shrink-0">
+          <div className="flex items-center gap-2">
+            {!isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
+              >
+                <Menu size={24} />
+              </button>
+            )}
+            <span className="font-medium text-xl text-gray-700 tracking-tight flex items-center gap-2">
+              DocuIA <Sparkles size={18} className="text-blue-500" />
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <label
+              htmlFor="file-upload"
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold cursor-pointer transition-all shrink-0 ${activeSession.documentId ? "bg-blue-50 border border-blue-200 text-blue-700" : "bg-blue-600 text-white"}`}
             >
-              <Menu size={24} />
-            </button>
-            <div className="font-semibold text-gray-700 truncate text-sm sm:text-base">
-              {activeSession.title}
+              {isUploading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : activeSession.documentId ? (
+                <CheckCircle2 size={16} />
+              ) : (
+                <Upload size={16} />
+              )}
+              <span className="hidden sm:inline">
+                {isUploading
+                  ? "Analizando..."
+                  : activeSession.documentId
+                    ? "Doc. Activo"
+                    : "Subir Archivo"}
+              </span>
+            </label>
+            <input
+              id="file-upload"
+              type="file"
+              className="hidden"
+              onChange={handleUpload}
+              accept=".pdf,.docx,.txt,image/png,image/jpeg,image/webp"
+              disabled={isUploading}
+            />
+            <div className="border-l pl-3 ml-1 h-6 flex items-center border-gray-200">
+              <UserButton />
             </div>
           </div>
-          <label
-            htmlFor="file-upload"
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold cursor-pointer transition-all shrink-0 ${activeSession.documentId ? "bg-blue-50 border border-blue-200 text-blue-700" : "bg-blue-600 text-white"}`}
-          >
-            {isUploading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : activeSession.documentId ? (
-              <CheckCircle2 size={16} />
-            ) : (
-              <Upload size={16} />
-            )}
-            <span className="hidden sm:inline">
-              {isUploading
-                ? "Analizando..."
-                : activeSession.documentId
-                  ? "Doc. Activo"
-                  : "Subir Archivo"}
-            </span>
-          </label>
-          <input
-            id="file-upload"
-            type="file"
-            className="hidden"
-            onChange={handleUpload}
-            accept=".pdf,.docx,.txt"
-            disabled={isUploading}
-          />
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24 lg:p-10">
-          <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-36 lg:p-10">
+          <div className="max-w-3xl mx-auto space-y-8">
             {activeSession.messages.length === 0 && (
-              <div className="py-10 sm:py-20 text-center animate-in fade-in">
-                <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 w-16 h-16 sm:w-24 sm:h-24 rounded-2xl sm:rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-white shadow-xl rotate-3">
-                  <Bot size={32} className="sm:hidden" />
-                  <Bot size={48} className="hidden sm:block" />
-                </div>
-                <h2 className="text-2xl sm:text-4xl font-black text-slate-800 mb-3">
-                  DocuMind AI
-                </h2>
-                <p className="text-slate-500 text-sm sm:text-lg max-w-xs sm:max-w-sm mx-auto px-4">
-                  Sube un PDF o Word para empezar a consultar tu información.
+              <div className="py-12 sm:py-24 animate-in fade-in">
+                <h1 className="text-4xl sm:text-5xl font-medium tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-2">
+                  Hola, ¿en qué te puedo ayudar hoy?
+                </h1>
+                <p className="text-gray-500 text-lg mb-10">
+                  Sube un documento y pregúntame lo que necesites saber.
                 </p>
               </div>
             )}
+
             {activeSession.messages.map((m) => (
               <div
                 key={m.id}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex w-full ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                <div
-                  className={`flex gap-3 max-w-[95%] sm:max-w-[85%] ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-                >
-                  <div
-                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 mt-1 ${m.role === "user" ? "bg-slate-800 text-white" : "bg-blue-600 text-white"}`}
-                  >
-                    {m.role === "user" ? <User size={16} /> : <Bot size={16} />}
+                {/* MENSAJE USUARIO - Estilo burbuja limpia derecha */}
+                {m.role === "user" ? (
+                  <div className="max-w-[85%] bg-[#f0f4f9] text-[#1f1f1f] px-5 py-3.5 rounded-[24px] rounded-tr-sm text-[15px] leading-relaxed">
+                    {m.content}
                   </div>
-                  <div
-                    className={`p-3 sm:p-5 rounded-2xl leading-relaxed text-sm sm:text-[15px] ${m.role === "user" ? "bg-white border border-gray-200 shadow-sm" : "bg-blue-50/50 border border-blue-100"}`}
-                  >
-                    <div className="whitespace-pre-wrap">
-                      {m.content || (
-                        <Loader2
-                          size={16}
-                          className="animate-spin text-blue-400"
-                        />
-                      )}
+                ) : (
+                  /* MENSAJE IA - Estilo texto plano izquierda con icono Sparkle */
+                  <div className="flex gap-4 max-w-[95%] sm:max-w-[85%] animate-in fade-in slide-in-from-bottom-2">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                      <Sparkles size={24} className="text-blue-600" />
+                    </div>
+                    <div className="text-[15px] leading-relaxed text-[#1f1f1f] pt-1">
+                      <div className="whitespace-pre-wrap">
+                        {m.content || (
+                          <div className="flex gap-1.5 pt-2">
+                            <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                            <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                            <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
-            <div ref={messagesEndRef} className="h-2" />
+            <div ref={messagesEndRef} className="h-4" />
           </div>
         </div>
 
-        {/* INPUT FIJO ABAJO EN MÓVILES (Safe Area) */}
-        <div className="absolute bottom-0 w-full bg-white border-t border-gray-100 p-3 sm:p-6 pb-[env(safe-area-inset-bottom,16px)]">
-          <form
-            onSubmit={sendMessage}
-            className="max-w-3xl mx-auto flex items-end gap-2 sm:gap-3 bg-gray-100 p-1.5 sm:p-2 rounded-[24px] focus-within:bg-white focus-within:ring-2 ring-blue-500/20 border border-transparent focus-within:border-blue-400 transition-all"
-          >
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (input.trim()) e.currentTarget.form?.requestSubmit();
-                }
-              }}
-              placeholder={
-                activeSession.documentId
-                  ? "Pregunta al documento..."
-                  : "Escribe aquí..."
-              }
-              className="flex-1 bg-transparent border-none outline-none p-3 sm:p-4 resize-none max-h-32 min-h-[48px] text-sm sm:text-base text-gray-700"
-              rows={1}
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className="bg-blue-600 text-white p-3 sm:p-4 rounded-full disabled:bg-gray-300 transition-all mb-0.5 mr-0.5 shrink-0"
+        {/* INPUT FIJO ESTILO GEMINI */}
+        <div className="absolute bottom-0 w-full bg-gradient-to-t from-white via-white to-transparent pt-10 pb-[env(safe-area-inset-bottom,24px)] px-4">
+          <div className="max-w-3xl mx-auto">
+            <form
+              onSubmit={sendMessage}
+              className="flex items-end gap-2 bg-[#f0f4f9] rounded-[28px] pl-4 pr-2 py-2 focus-within:ring-1 ring-gray-200 transition-all shadow-sm"
             >
-              {isLoading ? (
-                <Loader2 size={18} className="animate-spin" />
-              ) : (
-                <Send size={18} />
-              )}
-            </button>
-          </form>
+              {/* Botón de Upload integrado en el input */}
+              <label
+                htmlFor="file-upload"
+                className={`p-2.5 rounded-full cursor-pointer transition-colors shrink-0 mb-0.5 flex items-center justify-center ${activeSession.documentId ? "text-blue-600 hover:bg-blue-50" : "text-gray-500 hover:bg-gray-200"}`}
+                title="Adjuntar archivo"
+              >
+                {isUploading ? (
+                  <Loader2 size={20} className="animate-spin" />
+                ) : activeSession.documentId ? (
+                  <CheckCircle2 size={20} />
+                ) : (
+                  <Paperclip size={20} />
+                )}
+              </label>
+              <input
+                id="file-upload"
+                type="file"
+                className="hidden"
+                onChange={handleUpload}
+                accept=".pdf,.docx,.txt,image/png,image/jpeg,image/webp"
+                disabled={isUploading}
+              />
+
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (input.trim()) e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder={
+                  activeSession.documentId
+                    ? "Pregunta sobre el documento..."
+                    : "Escribe tu pregunta aquí..."
+                }
+                className="flex-1 bg-transparent border-none outline-none py-3 px-2 resize-none max-h-48 min-h-[48px] text-[15px] text-[#1f1f1f] placeholder:text-gray-500 custom-scrollbar"
+                rows={1}
+              />
+
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="p-3 rounded-full text-gray-500 hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent transition-all mb-0.5 shrink-0"
+              >
+                {isLoading ? (
+                  <Loader2 size={20} className="animate-spin text-blue-600" />
+                ) : (
+                  <Send
+                    size={20}
+                    className={input.trim() ? "text-blue-600" : ""}
+                  />
+                )}
+              </button>
+            </form>
+            <p className="text-center text-xs text-gray-400 mt-3 font-medium">
+              DocuMind AI puede cometer errores. Verifica la información
+              importante.
+            </p>
+          </div>
         </div>
       </main>
     </div>
