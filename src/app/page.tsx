@@ -6,7 +6,6 @@ import {
   Loader2,
   Sparkles,
   Menu,
-  X,
   CheckCircle2,
   MessageSquare,
   Trash2,
@@ -16,8 +15,11 @@ import {
   Copy,
   Edit2,
   Check,
+  LogOut, // Nuevo icono para logout
+  User, // Nuevo icono para usuario
 } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
+// Importamos cliente de Supabase para el frontend
+import { createBrowserClient } from "@supabase/ssr";
 
 interface Message {
   id: string;
@@ -34,13 +36,17 @@ interface ChatSession {
 }
 
 export default function Home() {
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState("");
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  // ESTADOS PARA NUEVAS FUNCIONALIDADES
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -50,6 +56,15 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Obtener sesión de usuario al cargar
+    const checkUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) setUserEmail(user.email || "Usuario");
+    };
+    checkUser();
+
     const saved = localStorage.getItem("documind_v3");
     if (saved) {
       try {
@@ -72,6 +87,12 @@ export default function Home() {
       localStorage.setItem("documind_v3", JSON.stringify(sessions));
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [sessions, mounted]);
+
+  // Función para cerrar sesión
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.reload(); // Recarga para volver al login
+  };
 
   const initialSession = () => {
     const newId = Date.now().toString();
@@ -236,7 +257,6 @@ export default function Home() {
     }
   };
 
-  // FUNCIONES DE SOPORTE
   const exportChat = () => {
     if (!activeSession || activeSession.messages.length === 0) return;
     let content = `# DocuMind AI - Exportación\n\n`;
@@ -340,7 +360,7 @@ export default function Home() {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 bg-white relative w-full h-[100dvh]">
-        <header className="h-16 flex items-center justify-between px-4 lg:px-6 shrink-0">
+        <header className="h-16 flex items-center justify-between px-4 lg:px-6 shrink-0 border-b border-gray-50">
           <div className="flex items-center gap-2">
             {!isSidebarOpen && (
               <button
@@ -392,8 +412,21 @@ export default function Home() {
               accept=".pdf,.docx,.txt,image/png,image/jpeg,image/webp"
               disabled={isUploading}
             />
-            <div className="border-l pl-3 ml-1 h-6 flex items-center border-gray-200">
-              <UserButton />
+
+            {/* COMPONENTE DE USUARIO REEMPLAZANDO CLERK */}
+            <div className="border-l pl-3 ml-1 h-8 flex items-center gap-3 border-gray-200">
+              <div className="flex items-center gap-2 group relative">
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 cursor-pointer hover:bg-blue-200 transition-colors">
+                  <User size={18} />
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  title="Cerrar Sesión"
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -406,7 +439,9 @@ export default function Home() {
                   Hola, ¿en qué te puedo ayudar hoy?
                 </h1>
                 <p className="text-gray-500 text-lg mb-10">
-                  Sube un documento y pregúntame lo que necesites saber.
+                  {userEmail
+                    ? `Sesión iniciada como ${userEmail}`
+                    : "Sube un documento y pregúntame lo que necesites saber."}
                 </p>
               </div>
             )}
@@ -455,7 +490,6 @@ export default function Home() {
                     )}
                   </div>
                 ) : (
-                  /* DISEÑO DE CARTULINA PARA LA IA */
                   <div className="flex gap-4 max-w-[95%] sm:max-w-[85%] animate-in fade-in slide-in-from-bottom-2 group">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                       <Sparkles size={24} className="text-blue-600" />
@@ -470,8 +504,6 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-
-                      {/* ICONO DE COPIAR INTEGRADO EN LA CARTULINA */}
                       {m.content && (
                         <button
                           onClick={() => copyToClipboard(m.content, m.id)}

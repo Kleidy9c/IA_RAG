@@ -1,19 +1,14 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText } from "ai";
-import { createClient } from "@supabase/supabase-js";
-import { auth } from "@clerk/nextjs/server";
+import { createServerClient } from "@supabase/ssr"; // Cambiado para Auth de Supabase
+import { cookies } from "next/headers";
 
 const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
-
-// 1. Obtener Embedding Inicial
+// 1. Obtener Embedding Inicial (Se mantiene intacto)
 async function getEmbedding(text: string): Promise<number[]> {
   try {
     const response = await fetch(
@@ -38,7 +33,7 @@ async function getEmbedding(text: string): Promise<number[]> {
   }
 }
 
-// 2. NUEVO: Reranking (Re-ordenamiento inteligente)
+// 2. Reranking (Se mantiene intacto)
 async function rerankChunks(query: string, chunks: any[]): Promise<any[]> {
   if (!chunks || chunks.length === 0) return [];
   try {
@@ -59,31 +54,48 @@ async function rerankChunks(query: string, chunks: any[]): Promise<any[]> {
       },
     );
 
-    if (!response.ok) return chunks; // Fallback si falla el reranker
+    if (!response.ok) return chunks;
 
     const scores = await response.json();
 
-    // Si la API devuelve un array de puntuaciones, ordenamos los chunks
     if (Array.isArray(scores)) {
       const scoredChunks = chunks.map((chunk, index) => ({
         ...chunk,
         rerank_score: scores[index],
       }));
-      // Ordenar de mayor a menor puntuación
       return scoredChunks.sort((a, b) => b.rerank_score - a.rerank_score);
     }
     return chunks;
   } catch (error) {
     console.error("Error en Reranking:", error);
-    return chunks; // Fallback a la búsqueda original de Supabase si falla
+    return chunks;
   }
 }
 
 export async function POST(req: Request) {
   try {
-    // PROTECCIÓN DE SEGURIDAD
-    const { userId } = await auth();
-    if (!userId) return new Response("No autorizado", { status: 401 });
+    // PROTECCIÓN DE SEGURIDAD CON SUPABASE AUTH
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+        },
+      },
+    );
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return new Response("No autorizado", { status: 401 });
+    }
 
     const { messages, documentId } = await req.json();
 
@@ -97,7 +109,7 @@ export async function POST(req: Request) {
         const embedding = await getEmbedding(lastUserMessage);
 
         if (embedding.length > 0) {
-          // 1. Buscamos más resultados iniciales en Supabase (ej: 15) para tener de dónde elegir
+          // 1. Buscamos resultados iniciales en Supabase
           const { data: searchData, error: dbError } = await supabase.rpc(
             "search_document_sections",
             {
@@ -114,16 +126,16 @@ export async function POST(req: Request) {
               dbError.message,
             );
           } else if (searchData && searchData.length > 0) {
-            // 2. RERANKING: Pasamos los 15 resultados por el modelo bge-reranker
+            // 2. RERANKING
             const rerankedData = await rerankChunks(
               lastUserMessage,
               searchData,
             );
 
-            // 3. Tomamos solo los 5 mejores después de re-ordenar
+            // 3. Tomamos los 5 mejores
             const topChunks = rerankedData.slice(0, 5);
 
-            // 4. CITAS: Formateamos el texto inyectando el ID o número de página para que la IA lo vea
+            // 4. CITAS
             contextText = topChunks
               .map((c: any) => `[Referencia: Fragmento ${c.id}]\n${c.content}`)
               .join("\n\n---\n\n");
