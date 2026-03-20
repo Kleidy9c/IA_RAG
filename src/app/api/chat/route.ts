@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText } from "ai";
-import { createServerClient } from "@supabase/ssr"; // Cambiado para Auth de Supabase
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 const openrouter = createOpenAI({
@@ -8,7 +8,7 @@ const openrouter = createOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-// 1. Obtener Embedding Inicial (Se mantiene intacto)
+// ─── Embedding ────────────────────────────────────────────────────────────────
 async function getEmbedding(text: string): Promise<number[]> {
   try {
     const response = await fetch(
@@ -25,15 +25,16 @@ async function getEmbedding(text: string): Promise<number[]> {
         }),
       },
     );
+    if (!response.ok) return [];
     const result = await response.json();
     return Array.isArray(result[0]) ? result[0] : result;
   } catch (error) {
-    console.error("Error al crear embedding en el chat:", error);
+    console.error("Error embedding en chat:", error);
     return [];
   }
 }
 
-// 2. Reranking (Se mantiene intacto)
+// ─── Reranking ────────────────────────────────────────────────────────────────
 async function rerankChunks(query: string, chunks: any[]): Promise<any[]> {
   if (!chunks || chunks.length === 0) return [];
   try {
@@ -53,63 +54,55 @@ async function rerankChunks(query: string, chunks: any[]): Promise<any[]> {
         }),
       },
     );
-
     if (!response.ok) return chunks;
 
     const scores = await response.json();
-
     if (Array.isArray(scores)) {
-      const scoredChunks = chunks.map((chunk, index) => ({
-        ...chunk,
-        rerank_score: scores[index],
-      }));
-      return scoredChunks.sort((a, b) => b.rerank_score - a.rerank_score);
+      return chunks
+        .map((chunk, i) => ({ ...chunk, rerank_score: scores[i] }))
+        .sort((a, b) => b.rerank_score - a.rerank_score);
     }
     return chunks;
   } catch (error) {
-    console.error("Error en Reranking:", error);
+    console.error("Error reranking:", error);
     return chunks;
   }
 }
 
+// ─── POST Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
-    // PROTECCIÓN DE SEGURIDAD CON SUPABASE AUTH
+    // Auth con Supabase SSR
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-        },
-      },
+      { cookies: { getAll: () => cookieStore.getAll() } },
     );
 
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
-
     if (authError || !user) {
       return new Response("No autorizado", { status: 401 });
     }
 
     const { messages, documentId } = await req.json();
+    if (!messages || !Array.isArray(messages)) {
+      return new Response("Formato de mensajes inválido", { status: 400 });
+    }
 
     const lastUserMessage = messages[messages.length - 1]?.content || "";
     let contextText = "";
+    let sourcesFound = 0;
 
+    // ── Búsqueda RAG si hay documento activo ──
     if (documentId && lastUserMessage) {
-      console.log("Buscando contexto para el documento ID:", documentId);
-
       try {
         const embedding = await getEmbedding(lastUserMessage);
 
         if (embedding.length > 0) {
-          // 1. Buscamos resultados iniciales en Supabase
           const { data: searchData, error: dbError } = await supabase.rpc(
             "search_document_sections",
             {
@@ -121,55 +114,60 @@ export async function POST(req: Request) {
           );
 
           if (dbError) {
-            console.error(
-              "Error en búsqueda RPC de Supabase:",
-              dbError.message,
-            );
+            console.error("Error RPC Supabase:", dbError.message);
           } else if (searchData && searchData.length > 0) {
-            // 2. RERANKING
-            const rerankedData = await rerankChunks(
-              lastUserMessage,
-              searchData,
-            );
+            // Reranking + top 5
+            const reranked = await rerankChunks(lastUserMessage, searchData);
+            const topChunks = reranked.slice(0, 5);
+            sourcesFound = topChunks.length;
 
-            // 3. Tomamos los 5 mejores
-            const topChunks = rerankedData.slice(0, 5);
-
-            // 4. CITAS
             contextText = topChunks
-              .map((c: any) => `[Referencia: Fragmento ${c.id}]\n${c.content}`)
+              .map(
+                (c: any, i: number) =>
+                  `[Fragmento ${i + 1} — ID: ${c.id}]\n${c.content}`,
+              )
               .join("\n\n---\n\n");
-
-            console.log("Contexto re-ordenado y listo para el LLM.");
           }
         }
       } catch (err) {
-        console.error("Error al obtener contexto DB:", err);
+        console.error("Error buscando contexto:", err);
       }
     }
 
-    const systemPrompt = `Eres DocuMind AI, un asistente inteligente con dos funciones principales: eres un experto analizando documentos y también un consejero de conocimiento general.
-    
-INSTRUCCIONES CRÍTICAS:
-1. CONSULTAS SOBRE EL DOCUMENTO: Si la pregunta del usuario trata sobre la información del documento, prioriza el CONTEXTO proporcionado. En este caso, SIEMPRE debes citar la referencia usando el formato [Referencia: Fragmento X].
-2. EXPANSIÓN Y CREATIVIDAD (IA GENERAL): Si el usuario te pide sugerencias, mejoras, expandir un tema, o te hace una pregunta general que no está en el contexto, ERES TOTALMENTE LIBRE de usar tu conocimiento global para ayudarlo de la mejor manera.
-3. TRANSPARENCIA: Cuando aportes ideas nuevas o conocimiento externo que no estaba en el documento original, menciónalo sutilmente (ej: "Basado en mi conocimiento general, también te sugeriría agregar...").
-4. FORMATO: Responde siempre en español, usa un formato limpio, profesional y amigable, usando viñetas o negritas para estructurar tu respuesta.
+    // ── System prompt ──
+    const systemPrompt = `Eres DocuIA, un asistente de análisis de documentos inteligente y profesional.
 
-CONTEXTO DEL DOCUMENTO (Usa esto como base, pero no te limites solo a esto si te piden más):
-"""
-${contextText || "No hay un documento activo o no se encontró información específica en la base de datos. Responde usando tu conocimiento general como IA."}
-"""`;
+MODO DE OPERACIÓN:
+${
+  documentId
+    ? `Tienes acceso a un documento del usuario. ${
+        sourcesFound > 0
+          ? `Se encontraron ${sourcesFound} fragmentos relevantes para responder.`
+          : "No se encontraron fragmentos específicos, pero puedes usar tu conocimiento general."
+      }`
+    : "No hay documento activo. Responde usando tu conocimiento general."
+}
+
+INSTRUCCIONES:
+1. **Con contexto del documento**: Prioriza siempre la información del documento. Cita los fragmentos usando [Fragmento N].
+2. **Expansión con conocimiento externo**: Si el usuario pide sugerencias, mejoras o preguntas generales, usa también tu conocimiento global y menciona cuándo lo haces.
+3. **Transparencia**: Si aportas información que NO está en el documento, indícalo brevemente (ej: "Basado en mi conocimiento general…").
+4. **Formato**: Responde en español. Usa formato Markdown: negritas, listas y encabezados para estructurar mejor las respuestas largas. Sé conciso pero completo.
+5. **Tono**: Profesional, claro y directo. Evita introducciones largas.
+
+${contextText ? `CONTEXTO DEL DOCUMENTO:\n"""\n${contextText}\n"""` : ""}`;
 
     const result = await streamText({
-      model: openrouter.chat("meta-llama/llama-3.1-8b-instruct"),
+      model: openrouter.chat("openrouter/free"),
       system: systemPrompt,
-      messages: messages,
-    });
+      messages,
+      maxTokens: 1500,
+      temperature: 0.7,
+    } as any);
 
     return result.toTextStreamResponse();
   } catch (error: any) {
-    console.error("Error general en el chat:", error);
-    return new Response(error.message, { status: 500 });
+    console.error("Error en /api/chat:", error);
+    return new Response(error.message || "Error interno", { status: 500 });
   }
 }

@@ -12,36 +12,91 @@ export function SocialAuth() {
     await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        // Asegúrate de configurar esta URL en tu Dashboard de Supabase
         redirectTo: `${window.location.origin}/api/auth/callback`,
       },
     });
   };
 
   return (
-    <div className="space-y-3 w-full">
-      <div className="relative my-6">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-gray-200"></span>
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-2 text-gray-500">O continúa con</span>
-        </div>
+    <div style={{ marginTop: 20 }}>
+      <div
+        style={{ position: "relative", textAlign: "center", marginBottom: 16 }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: 0,
+            right: 0,
+            height: 1,
+            background: "rgba(255,255,255,0.07)",
+          }}
+        />
+        <span
+          style={{
+            position: "relative",
+            background: "#111",
+            padding: "0 10px",
+            fontSize: 12,
+            color: "#555",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          O continúa con
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          onClick={() => handleSocialLogin("github")}
-          className="flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all font-medium text-sm"
-        >
-          <Github size={20} /> GitHub
-        </button>
-        <button
-          onClick={() => handleSocialLogin("facebook")}
-          className="flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all font-medium text-sm text-[#1877F2]"
-        >
-          <Facebook size={20} fill="currentColor" /> Facebook
-        </button>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        {[
+          {
+            provider: "github" as const,
+            label: "GitHub",
+            icon: <Github size={16} />,
+            color: "#f0f0f0",
+          },
+          {
+            provider: "facebook" as const,
+            label: "Facebook",
+            icon: <Facebook size={16} fill="#1877F2" />,
+            color: "#1877F2",
+          },
+        ].map((item) => (
+          <button
+            key={item.provider}
+            onClick={() => handleSocialLogin(item.provider)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "10px 14px",
+              background: "#1a1a1a",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 10,
+              cursor: "pointer",
+              color: item.color,
+              fontSize: 13,
+              fontWeight: 500,
+              transition: "border-color 0.15s, background 0.15s",
+              fontFamily: "inherit",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor =
+                "rgba(255,255,255,0.15)";
+              (e.currentTarget as HTMLButtonElement).style.background = "#222";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor =
+                "rgba(255,255,255,0.08)";
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "#1a1a1a";
+            }}
+          >
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
       </div>
     </div>
   );
