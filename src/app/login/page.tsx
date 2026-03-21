@@ -3,8 +3,9 @@ import { useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Sparkles, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { SocialAuth } from "@/app/components/SocialAuth";
+import { DocuIAIcon } from "@/app/page";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -92,13 +93,12 @@ export default function LoginPage() {
                 height: 48,
                 borderRadius: 14,
                 margin: "0 auto 14px",
-                background: "linear-gradient(135deg, #c17aff, #7c3aed)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Sparkles size={22} color="#fff" />
+              <DocuIAIcon />
             </div>
             <h1
               style={{
@@ -108,7 +108,7 @@ export default function LoginPage() {
                 letterSpacing: "-0.4px",
               }}
             >
-              Bienvenido a DocuIA
+              Bienvenido a Skan AI
             </h1>
             <p style={{ color: "#666", fontSize: 14, marginTop: 6 }}>
               Ingresa a tu cuenta para continuar

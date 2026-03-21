@@ -42,7 +42,7 @@ interface ChatSession {
 // ─── Logo DocuIA — Hex Data ───────────────────────────────────────────────────
 // Lupa con hexágono exterior, líneas de datos internas y nodos en vértices.
 // isThinking=true: hexágono rotante + nodos parpadeantes + glow cyan.
-function DocuIAIcon({
+export function DocuIAIcon({
   size = 28,
   isThinking = false,
 }: {
@@ -267,21 +267,384 @@ function hexPoints(cx: number, cy: number, r: number): string {
   }).join(" ");
 }
 
-// ─── Markdown renderer simple ────────────────────────────────────────────────
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/^#{3}\s(.+)$/gm, "<h3>$1</h3>")
-    .replace(/^#{2}\s(.+)$/gm, "<h2>$1</h2>")
-    .replace(/^#{1}\s(.+)$/gm, "<h1>$1</h1>")
-    .replace(/^[-•]\s(.+)$/gm, "<li>$1</li>")
-    .replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>")
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<[hul])(.+)$/gm, (m) =>
-      m.startsWith("<") ? m : `<p>${m}</p>`,
-    );
+// ─── Markdown renderer con react-markdown + syntax highlighting ──────────────
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import type { Components } from "react-markdown";
+
+// Tema oscuro personalizado que combina con la paleta cyan del proyecto
+const codeTheme: Record<string, React.CSSProperties> = {
+  'code[class*="language-"]': {
+    color: "#e2e8f0",
+    background: "none",
+    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+    fontSize: "13px",
+    lineHeight: "1.6",
+  },
+  'pre[class*="language-"]': { background: "none", margin: 0, padding: 0 },
+  comment: { color: "#4a5568", fontStyle: "italic" },
+  prolog: { color: "#4a5568" },
+  doctype: { color: "#4a5568" },
+  cdata: { color: "#4a5568" },
+  punctuation: { color: "#718096" },
+  property: { color: "#00e5ff" },
+  tag: { color: "#00e5ff" },
+  boolean: { color: "#f6ad55" },
+  number: { color: "#f6ad55" },
+  constant: { color: "#f6ad55" },
+  symbol: { color: "#f6ad55" },
+  deleted: { color: "#fc8181" },
+  selector: { color: "#68d391" },
+  "attr-name": { color: "#68d391" },
+  string: { color: "#68d391" },
+  char: { color: "#68d391" },
+  builtin: { color: "#68d391" },
+  inserted: { color: "#68d391" },
+  operator: { color: "#90cdf4" },
+  entity: { color: "#90cdf4", cursor: "help" },
+  url: { color: "#90cdf4" },
+  variable: { color: "#90cdf4" },
+  atrule: { color: "#b794f4" },
+  "attr-value": { color: "#b794f4" },
+  function: { color: "#b794f4" },
+  "class-name": { color: "#b794f4" },
+  keyword: { color: "#00e5ff", fontStyle: "italic" },
+  regex: { color: "#f6ad55" },
+  important: { color: "#f6ad55", fontWeight: "bold" },
+  bold: { fontWeight: "bold" },
+  italic: { fontStyle: "italic" },
+};
+
+function CodeBlock({ language, value }: { language: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      style={{
+        borderRadius: 10,
+        overflow: "hidden",
+        border: "1px solid rgba(0,229,255,0.15)",
+        margin: "10px 0",
+        background: "#0a0a14",
+      }}
+    >
+      {/* Header del bloque */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "7px 14px",
+          background: "rgba(0,229,255,0.05)",
+          borderBottom: "1px solid rgba(0,229,255,0.1)",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#00e5ff",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            fontFamily: "'JetBrains Mono', monospace",
+          }}
+        >
+          {language || "código"}
+        </span>
+        <button
+          onClick={handleCopy}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: copied ? "#4ade80" : "#555",
+            fontSize: 11,
+            padding: "2px 6px",
+            borderRadius: 4,
+            transition: "color 0.2s",
+            fontFamily: "system-ui",
+          }}
+        >
+          {copied ? (
+            <>
+              <Check size={11} />
+              Copiado
+            </>
+          ) : (
+            <>
+              <Copy size={11} />
+              Copiar
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Código con highlight */}
+      <div
+        style={{
+          padding: "14px 16px",
+          overflowX: "auto",
+          fontSize: 13,
+          lineHeight: 1.6,
+        }}
+      >
+        <SyntaxHighlighter
+          language={language || "text"}
+          style={codeTheme}
+          customStyle={{ background: "none", padding: 0, margin: 0 }}
+          wrapLongLines={false}
+          PreTag="div"
+        >
+          {value}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  );
+}
+
+// Componentes personalizados para react-markdown
+function buildComponents(): Components {
+  return {
+    // Bloque de código ``` ... ```
+    code({ node, className, children, ...props }: any) {
+      const isBlock = !props.inline;
+      const language = (className || "").replace("language-", "");
+      const value = String(children).replace(/\n$/, "");
+
+      if (isBlock) {
+        return <CodeBlock language={language} value={value} />;
+      }
+
+      // Código inline `...`
+      return (
+        <code
+          style={{
+            background: "rgba(0,229,255,0.08)",
+            border: "1px solid rgba(0,229,255,0.15)",
+            padding: "1px 7px",
+            borderRadius: 4,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: "0.85em",
+            color: "#00e5ff",
+          }}
+        >
+          {children}
+        </code>
+      );
+    },
+
+    // Párrafos
+    p({ children }: any) {
+      return (
+        <p style={{ margin: "0.45em 0", lineHeight: 1.75, color: "#d0d0d0" }}>
+          {children}
+        </p>
+      );
+    },
+
+    // Encabezados
+    h1({ children }: any) {
+      return (
+        <h1
+          style={{
+            fontSize: "1.25em",
+            fontWeight: 600,
+            color: "#f0f0f0",
+            margin: "1em 0 0.4em",
+            letterSpacing: "-0.3px",
+          }}
+        >
+          {children}
+        </h1>
+      );
+    },
+    h2({ children }: any) {
+      return (
+        <h2
+          style={{
+            fontSize: "1.1em",
+            fontWeight: 600,
+            color: "#f0f0f0",
+            margin: "0.9em 0 0.35em",
+          }}
+        >
+          {children}
+        </h2>
+      );
+    },
+    h3({ children }: any) {
+      return (
+        <h3
+          style={{
+            fontSize: "1em",
+            fontWeight: 600,
+            color: "#e0e0e0",
+            margin: "0.8em 0 0.3em",
+          }}
+        >
+          {children}
+        </h3>
+      );
+    },
+
+    // Listas
+    ul({ children }: any) {
+      return (
+        <ul
+          style={{ paddingLeft: "1.4em", margin: "0.4em 0", color: "#d0d0d0" }}
+        >
+          {children}
+        </ul>
+      );
+    },
+    ol({ children }: any) {
+      return (
+        <ol
+          style={{ paddingLeft: "1.4em", margin: "0.4em 0", color: "#d0d0d0" }}
+        >
+          {children}
+        </ol>
+      );
+    },
+    li({ children }: any) {
+      return (
+        <li style={{ margin: "0.2em 0", lineHeight: 1.65 }}>{children}</li>
+      );
+    },
+
+    // Negritas y cursivas
+    strong({ children }: any) {
+      return (
+        <strong style={{ color: "#f0f0f0", fontWeight: 600 }}>
+          {children}
+        </strong>
+      );
+    },
+    em({ children }: any) {
+      return (
+        <em style={{ color: "#c0c0c0", fontStyle: "italic" }}>{children}</em>
+      );
+    },
+
+    // Blockquote
+    blockquote({ children }: any) {
+      return (
+        <blockquote
+          style={{
+            borderLeft: "3px solid rgba(0,229,255,0.4)",
+            paddingLeft: 14,
+            margin: "8px 0",
+            color: "#888",
+            fontStyle: "italic",
+          }}
+        >
+          {children}
+        </blockquote>
+      );
+    },
+
+    // Links
+    a({ href, children }: any) {
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: "#00e5ff",
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+          }}
+        >
+          {children}
+        </a>
+      );
+    },
+
+    // Separador
+    hr() {
+      return (
+        <hr
+          style={{
+            border: "none",
+            borderTop: "1px solid rgba(255,255,255,0.07)",
+            margin: "12px 0",
+          }}
+        />
+      );
+    },
+
+    // Tablas
+    table({ children }: any) {
+      return (
+        <div style={{ overflowX: "auto", margin: "10px 0" }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 13,
+              color: "#d0d0d0",
+            }}
+          >
+            {children}
+          </table>
+        </div>
+      );
+    },
+    th({ children }: any) {
+      return (
+        <th
+          style={{
+            padding: "7px 12px",
+            textAlign: "left",
+            background: "rgba(0,229,255,0.08)",
+            borderBottom: "1px solid rgba(0,229,255,0.2)",
+            color: "#00e5ff",
+            fontWeight: 600,
+            fontSize: 12,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {children}
+        </th>
+      );
+    },
+    td({ children }: any) {
+      return (
+        <td
+          style={{
+            padding: "6px 12px",
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          {children}
+        </td>
+      );
+    },
+  };
+}
+
+// Componente final que usa react-markdown
+function MarkdownRenderer({ content }: { content: string }) {
+  const components = buildComponents();
+  return (
+    <ReactMarkdown
+      components={components}
+      // Evita que envuelva todo en un <p> extra
+      unwrapDisallowed={true}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }
 
 export default function Home() {
@@ -294,9 +657,11 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [input, setInput] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userInitial, setUserInitial] = useState("U");
+  const [userId, setUserId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -310,42 +675,32 @@ export default function Home() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // ── 1. Init: usuario + chats desde Supabase ──────────────────────────────
   useEffect(() => {
-    const checkUser = async () => {
+    const init = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user) {
-        setUserEmail(user.email || "Usuario");
-        setUserInitial((user.email?.[0] || "U").toUpperCase());
+      if (!user) {
+        window.location.href = "/login";
+        return;
       }
+      setUserEmail(user.email || "Usuario");
+      setUserInitial((user.email?.[0] || "U").toUpperCase());
+      setUserId(user.id);
+      await loadChats(user.id);
+      setIsSidebarOpen(window.innerWidth >= 1024);
+      setMounted(true);
     };
-    checkUser();
-
-    const saved = localStorage.getItem("docuia_sessions_v4");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSessions(parsed);
-          setActiveSessionId(parsed[0].id);
-        } else createInitialSession();
-      } catch {
-        createInitialSession();
-      }
-    } else createInitialSession();
-
-    setIsSidebarOpen(window.innerWidth >= 1024);
-    setMounted(true);
+    init();
   }, []);
 
+  // ── 2. Scroll al último mensaje ───────────────────────────────────────────
   useEffect(() => {
-    if (mounted && sessions.length > 0)
-      localStorage.setItem("docuia_sessions_v4", JSON.stringify(sessions));
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [sessions, mounted]);
+  }, [sessions]);
 
-  // Cerrar menú de usuario al hacer clic afuera
+  // ── 3. Cerrar menú usuario al clicar fuera ────────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
@@ -358,7 +713,7 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Auto-resize textarea
+  // ── 4. Auto-resize textarea ───────────────────────────────────────────────
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -367,42 +722,137 @@ export default function Home() {
     }
   }, [input]);
 
-  const createInitialSession = () => {
-    const newId = Date.now().toString();
-    const session: ChatSession = {
-      id: newId,
-      title: "Nuevo Chat",
-      documentId: null,
-      fileName: null,
-      messages: [],
-      createdAt: Date.now(),
-    };
-    setSessions([session]);
-    setActiveSessionId(newId);
+  // ── SUPABASE: cargar chats con sus mensajes ───────────────────────────────
+  const loadChats = async (uid: string) => {
+    setIsLoadingChats(true);
+    try {
+      const { data: chatsData, error } = await supabase
+        .from("chats")
+        .select("id, title, document_id, file_name, created_at, updated_at")
+        .eq("user_id", uid)
+        .order("updated_at", { ascending: false });
+
+      if (error) throw error;
+
+      if (!chatsData || chatsData.length === 0) {
+        await createNewChatInDB(uid);
+        return;
+      }
+
+      const chatIds = chatsData.map((c) => c.id);
+      const { data: messagesData } = await supabase
+        .from("messages")
+        .select("id, chat_id, role, content, created_at")
+        .in("chat_id", chatIds)
+        .order("created_at", { ascending: true });
+
+      const msgByChat: Record<string, Message[]> = {};
+      (messagesData || []).forEach((m) => {
+        if (!msgByChat[m.chat_id]) msgByChat[m.chat_id] = [];
+        msgByChat[m.chat_id].push({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+        });
+      });
+
+      const loaded: ChatSession[] = chatsData.map((c) => ({
+        id: c.id,
+        title: c.title,
+        documentId: c.document_id ?? null,
+        fileName: c.file_name ?? null,
+        messages: msgByChat[c.id] || [],
+        createdAt: new Date(c.created_at).getTime(),
+      }));
+
+      setSessions(loaded);
+      setActiveSessionId(loaded[0].id);
+    } catch (err) {
+      console.error("Error cargando chats:", err);
+    } finally {
+      setIsLoadingChats(false);
+    }
   };
 
-  const createNewChat = () => {
-    const newId = Date.now().toString();
-    const session: ChatSession = {
-      id: newId,
-      title: "Nuevo Chat",
+  // ── SUPABASE: crear chat nuevo en BD ─────────────────────────────────────
+  const createNewChatInDB = async (
+    uid?: string,
+  ): Promise<ChatSession | null> => {
+    const targetUid = uid || userId;
+    if (!targetUid) return null;
+    const { data, error } = await supabase
+      .from("chats")
+      .insert({ user_id: targetUid, title: "Nuevo Chat" })
+      .select("id, title, document_id, file_name, created_at")
+      .single();
+    if (error || !data) {
+      console.error("Error creando chat:", error);
+      return null;
+    }
+    const newSession: ChatSession = {
+      id: data.id,
+      title: data.title,
       documentId: null,
       fileName: null,
       messages: [],
-      createdAt: Date.now(),
+      createdAt: new Date(data.created_at).getTime(),
     };
-    setSessions((prev) => [session, ...prev]);
-    setActiveSessionId(newId);
+    setSessions((prev) => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
     if (window.innerWidth < 1024) setIsSidebarOpen(false);
+    return newSession;
   };
 
-  const deleteChat = (id: string, e: React.MouseEvent) => {
+  // ── SUPABASE: helpers ─────────────────────────────────────────────────────
+  const updateChatTitle = async (chatId: string, title: string) => {
+    await supabase.from("chats").update({ title }).eq("id", chatId);
+    setSessions((prev) =>
+      prev.map((s) => (s.id === chatId ? { ...s, title } : s)),
+    );
+  };
+
+  const updateChatDocument = async (
+    chatId: string,
+    documentId: string,
+    fileName: string,
+  ) => {
+    await supabase
+      .from("chats")
+      .update({ document_id: documentId, file_name: fileName })
+      .eq("id", chatId);
+  };
+
+  const saveMessage = async (
+    chatId: string,
+    role: "user" | "assistant",
+    content: string,
+  ): Promise<string> => {
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({ chat_id: chatId, role, content })
+      .select("id")
+      .single();
+    if (error || !data) {
+      console.error("Error guardando mensaje:", error);
+      return Date.now().toString();
+    }
+    return data.id;
+  };
+
+  const updateMessageContent = async (messageId: string, content: string) => {
+    await supabase.from("messages").update({ content }).eq("id", messageId);
+  };
+
+  const createNewChat = () => createNewChatInDB();
+
+  const deleteChat = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    await supabase.from("chats").delete().eq("id", id);
     const filtered = sessions.filter((s) => s.id !== id);
     setSessions(filtered);
     if (activeSessionId === id) {
       if (filtered.length > 0) setActiveSessionId(filtered[0].id);
-      else createInitialSession();
+      else await createNewChatInDB();
     }
   };
 
@@ -417,7 +867,6 @@ export default function Home() {
     s.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Agrupar sesiones por fecha
   const groupSessions = (sessions: ChatSession[]) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -425,14 +874,12 @@ export default function Home() {
     yesterday.setDate(yesterday.getDate() - 1);
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
-
     const groups: Record<string, ChatSession[]> = {
       Hoy: [],
       Ayer: [],
       "Esta semana": [],
       Anterior: [],
     };
-
     sessions.forEach((s) => {
       const d = new Date(s.createdAt);
       if (d >= today) groups["Hoy"].push(s);
@@ -440,7 +887,6 @@ export default function Home() {
       else if (d >= weekAgo) groups["Esta semana"].push(s);
       else groups["Anterior"].push(s);
     });
-
     return groups;
   };
 
@@ -449,18 +895,24 @@ export default function Home() {
     if (!file || !activeSession) return;
     setIsUploading(true);
     setUploadError(null);
-
     const formData = new FormData();
     formData.append("file", file);
-
     try {
       const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
       const data = await res.json();
-
       if (res.ok && data.documentId) {
+        await updateChatDocument(activeSession.id, data.documentId, file.name);
+        const welcomeMsg = `📄 **${file.name}** procesado y listo. Tengo acceso completo a su contenido.\n\n¿Qué quieres saber sobre este documento?`;
+        const msgId = await saveMessage(
+          activeSession.id,
+          "assistant",
+          welcomeMsg,
+        );
+        const newTitle = file.name.replace(/\.[^/.]+$/, "").substring(0, 28);
+        await updateChatTitle(activeSession.id, newTitle);
         setSessions((prev) =>
           prev.map((s) =>
             s.id === activeSessionId
@@ -468,14 +920,10 @@ export default function Home() {
                   ...s,
                   documentId: data.documentId,
                   fileName: file.name,
-                  title: file.name.replace(/\.[^/.]+$/, "").substring(0, 28),
+                  title: newTitle,
                   messages: [
                     ...s.messages,
-                    {
-                      id: Date.now().toString(),
-                      role: "assistant",
-                      content: `📄 **${file.name}** procesado y listo. Tengo acceso completo a su contenido.\n\n¿Qué quieres saber sobre este documento?`,
-                    },
+                    { id: msgId, role: "assistant", content: welcomeMsg },
                   ],
                 }
               : s,
@@ -498,13 +946,14 @@ export default function Home() {
     const textToSend = overrideContent || input;
     if (!textToSend.trim() || isLoading || !currentSession) return;
 
+    // Guardar mensaje del usuario en BD
+    const userMsgId = await saveMessage(currentSession.id, "user", textToSend);
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: userMsgId,
       role: "user",
       content: textToSend,
     };
     const currentMessages = [...currentSession.messages, userMsg];
-
     setSessions((prev) =>
       prev.map((s) =>
         s.id === activeSessionId ? { ...s, messages: currentMessages } : s,
@@ -512,6 +961,26 @@ export default function Home() {
     );
     setInput("");
     setIsLoading(true);
+
+    // Crear mensaje vacío de IA (se actualiza al terminar el stream)
+    const assistantMsgId = await saveMessage(
+      currentSession.id,
+      "assistant",
+      "",
+    );
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId
+          ? {
+              ...s,
+              messages: [
+                ...s.messages,
+                { id: assistantMsgId, role: "assistant", content: "" },
+              ],
+            }
+          : s,
+      ),
+    );
 
     try {
       const res = await fetch("/api/chat", {
@@ -522,25 +991,9 @@ export default function Home() {
           documentId: currentSession.documentId,
         }),
       });
-
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let assistantText = "";
-      const assistantId = Date.now().toString() + "ai";
-
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === activeSessionId
-            ? {
-                ...s,
-                messages: [
-                  ...s.messages,
-                  { id: assistantId, role: "assistant", content: "" },
-                ],
-              }
-            : s,
-        ),
-      );
 
       if (reader) {
         while (true) {
@@ -553,7 +1006,7 @@ export default function Home() {
                 ? {
                     ...s,
                     messages: s.messages.map((m) =>
-                      m.id === assistantId
+                      m.id === assistantMsgId
                         ? { ...m, content: assistantText }
                         : m,
                     ),
@@ -564,16 +1017,28 @@ export default function Home() {
         }
       }
 
-      // Auto-title tras primer mensaje
+      // Una sola escritura en BD al terminar el stream
+      await updateMessageContent(assistantMsgId, assistantText);
+
+      // Auto-título tras primer intercambio
       if (currentSession.title === "Nuevo Chat" && textToSend.length > 0) {
         const title =
-          textToSend.slice(0, 36) + (textToSend.length > 36 ? "…" : "");
-        setSessions((prev) =>
-          prev.map((s) => (s.id === activeSessionId ? { ...s, title } : s)),
-        );
+          textToSend.slice(0, 36) + (textToSend.length > 36 ? "\u2026" : "");
+        await updateChatTitle(currentSession.id, title);
       }
     } catch (error) {
       console.error("Error:", error);
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? {
+                ...s,
+                messages: s.messages.filter((m) => m.id !== assistantMsgId),
+              }
+            : s,
+        ),
+      );
+      await supabase.from("messages").delete().eq("id", assistantMsgId);
     } finally {
       setIsLoading(false);
     }
@@ -627,7 +1092,25 @@ export default function Home() {
     { icon: <MessageSquare size={16} />, text: "Compara secciones" },
   ];
 
-  if (!mounted || !activeSession) return null;
+  if (!mounted || !activeSession)
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100dvh",
+          background: "#0d0d0d",
+          flexDirection: "column",
+          gap: 16,
+        }}
+      >
+        <DocuIAIcon size={48} isThinking={true} />
+        <span style={{ fontSize: 13, color: "#444", fontFamily: "system-ui" }}>
+          Cargando tus chats…
+        </span>
+      </div>
+    );
 
   const sessionGroups = groupSessions(filteredSessions);
 
@@ -660,17 +1143,16 @@ export default function Home() {
         .scrollbar::-webkit-scrollbar { width: 4px; }
         .scrollbar::-webkit-scrollbar-track { background: transparent; }
         .scrollbar::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 4px; }
-        .prose h1, .prose h2, .prose h3 { font-weight: 600; margin: 0.75em 0 0.4em; color: var(--text-primary); }
-        .prose h1 { font-size: 1.2em; }
-        .prose h2 { font-size: 1.1em; }
-        .prose h3 { font-size: 1em; }
-        .prose p { margin: 0.5em 0; line-height: 1.7; color: #d0d0d0; }
-        .prose ul { padding-left: 1.4em; margin: 0.4em 0; }
-        .prose li { margin: 0.25em 0; color: #d0d0d0; }
-        .prose code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.85em; color: var(--accent); }
-        .prose strong { color: var(--text-primary); font-weight: 600; }
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+        @keyframes thinking-dot {
+          0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+          40%            { transform: scale(1.2); opacity: 1; }
+        }
+        @keyframes thinking-bar {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(500%); }
+        }
         .msg-in { animation: fadeSlideUp 0.25s ease forwards; }
         .dot-pulse { animation: pulse 1.2s ease-in-out infinite; }
         .dot-pulse:nth-child(2) { animation-delay: 0.2s; }
@@ -737,7 +1219,7 @@ export default function Home() {
                   letterSpacing: "-0.3px",
                 }}
               >
-                DocuIA
+                Skan AI
               </span>
             </div>
 
@@ -1448,77 +1930,116 @@ export default function Home() {
                       )}
                     </div>
                   ) : (
-                    <div style={{ display: "flex", gap: 12, maxWidth: "100%" }}>
-                      {/* ✅ Logo animado — isThinking cuando content está vacío */}
-                      <div style={{ marginTop: 2 }}>
-                        <DocuIAIcon size={28} isThinking={!m.content} />
-                      </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        maxWidth: "100%",
+                        width: "100%",
+                      }}
+                    >
+                      {/* ── Icono pequeño solo cuando ya hay respuesta ── */}
+                      {m.content && (
+                        <div style={{ marginTop: 3, flexShrink: 0 }}>
+                          <DocuIAIcon size={26} isThinking={false} />
+                        </div>
+                      )}
+
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ position: "relative", paddingBottom: 8 }}>
                           {m.content ? (
-                            <div
-                              className="prose"
-                              dangerouslySetInnerHTML={{
-                                __html: renderMarkdown(m.content),
-                              }}
-                              style={{
-                                fontSize: 14,
-                                lineHeight: 1.7,
-                                color: "#d0d0d0",
-                              }}
-                            />
+                            <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+                              <MarkdownRenderer content={m.content} />
+                            </div>
                           ) : (
-                            /* Estado "pensando" — skeleton animado */
+                            /* ── Estado PENSANDO — icono grande centrado estilo Claude/Gemini ── */
                             <div
                               style={{
-                                paddingTop: 4,
                                 display: "flex",
                                 flexDirection: "column",
-                                gap: 8,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: "48px 0 40px",
+                                width: "100%",
+                                animation: "fadeSlideUp 0.3s ease",
                               }}
                             >
+                              {/* Icono grande con animación completa */}
                               <div
                                 style={{
-                                  fontSize: 12,
-                                  color: "var(--text-muted)",
-                                  marginBottom: 4,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 6,
+                                  position: "relative",
+                                  marginBottom: 28,
                                 }}
                               >
-                                <span>Analizando</span>
-                                <span style={{ display: "flex", gap: 3 }}>
-                                  {[0, 0.25, 0.5].map((delay, i) => (
+                                <DocuIAIcon size={72} isThinking={true} />
+                              </div>
+
+                              {/* Texto "Pensando" con puntos */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  marginBottom: 20,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 15,
+                                    fontWeight: 500,
+                                    color: "var(--text-secondary)",
+                                    letterSpacing: "-0.2px",
+                                  }}
+                                >
+                                  Pensando
+                                </span>
+                                <span
+                                  style={{
+                                    display: "flex",
+                                    gap: 4,
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  {[0, 0.2, 0.4].map((delay, i) => (
                                     <span
                                       key={i}
                                       style={{
-                                        width: 4,
-                                        height: 4,
+                                        width: 5,
+                                        height: 5,
                                         borderRadius: "50%",
-                                        background: "var(--accent)",
+                                        background: "#00e5ff",
                                         display: "inline-block",
-                                        animation: `pulse 1.2s ease-in-out infinite`,
+                                        animation:
+                                          "thinking-dot 1.4s ease-in-out infinite",
                                         animationDelay: `${delay}s`,
                                       }}
                                     />
                                   ))}
                                 </span>
                               </div>
-                              {[200, 160, 180].map((w, i) => (
+
+                              {/* Barra de progreso indeterminada */}
+                              <div
+                                style={{
+                                  width: 200,
+                                  height: 2,
+                                  background: "rgba(0,229,255,0.08)",
+                                  borderRadius: 2,
+                                  overflow: "hidden",
+                                }}
+                              >
                                 <div
-                                  key={i}
                                   style={{
-                                    height: 9,
-                                    borderRadius: 5,
-                                    background: "rgba(255,255,255,0.06)",
-                                    width: w,
+                                    height: "100%",
+                                    width: "45%",
+                                    background:
+                                      "linear-gradient(90deg, transparent, #00e5ff, transparent)",
+                                    borderRadius: 2,
                                     animation:
-                                      "docuia-skeleton 1.8s ease-in-out infinite",
-                                    animationDelay: `${i * 0.2}s`,
+                                      "thinking-bar 1.6s ease-in-out infinite",
                                   }}
                                 />
-                              ))}
+                              </div>
                             </div>
                           )}
                           {m.content && (

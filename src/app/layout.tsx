@@ -13,19 +13,30 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DocuIA - IA para tus documentos",
-  description: "Analiza y chatea con tus PDFs, Word y archivos de texto",
-  // AGREGAR ICONO AQUÍ
+  title: "Skan AI para tus documentos",
+  description:
+    "Analiza y chatea con tus PDFs, Word, archivos de texto y imagenes",
   icons: {
     icon: [
       {
-        url: "/icon.png",
-        href: "/icon.png",
+        url: "/favicon.ico",
+        sizes: "48x48",
+        type: "image/x-icon",
+      },
+      {
+        url: "/icon.svg",
+        type: "image/svg+xml",
+      },
+      {
+        url: "/icon-32.png",
+        sizes: "32x32",
+        type: "image/png",
       },
     ],
     apple: [
       {
-        url: "/icon.png",
+        url: "/appletouch-icon.png",
+        sizes: "180x180",
       },
     ],
   },
