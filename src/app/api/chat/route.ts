@@ -55,7 +55,6 @@ async function rerankChunks(query: string, chunks: any[]): Promise<any[]> {
       },
     );
     if (!response.ok) return chunks;
-
     const scores = await response.json();
     if (Array.isArray(scores)) {
       return chunks
@@ -72,7 +71,6 @@ async function rerankChunks(query: string, chunks: any[]): Promise<any[]> {
 // ─── POST Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
-    // Auth con Supabase SSR
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -88,7 +86,7 @@ export async function POST(req: Request) {
       return new Response("No autorizado", { status: 401 });
     }
 
-    const { messages, documentId } = await req.json();
+    const { messages, chatId } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return new Response("Formato de mensajes inválido", { status: 400 });
     }
@@ -96,37 +94,62 @@ export async function POST(req: Request) {
     const lastUserMessage = messages[messages.length - 1]?.content || "";
     let contextText = "";
     let sourcesFound = 0;
+    let documentNames: string[] = [];
 
-    // ── Búsqueda RAG si hay documento activo ──
-    if (documentId && lastUserMessage) {
+    // ── 1. Obtener todos los documentos del chat ───────────────────────────
+    if (chatId && lastUserMessage) {
       try {
-        const embedding = await getEmbedding(lastUserMessage);
+        const { data: chatDocs, error: docsError } = await supabase
+          .from("chat_documents")
+          .select("document_id, file_name")
+          .eq("chat_id", chatId);
 
-        if (embedding.length > 0) {
-          const { data: searchData, error: dbError } = await supabase.rpc(
-            "search_document_sections",
-            {
-              query_embedding: embedding,
-              match_threshold: 0.1,
-              match_count: 15,
-              filter_document_id: documentId,
-            },
+        if (docsError) {
+          console.error("Error obteniendo documentos:", docsError.message);
+        } else if (chatDocs && chatDocs.length > 0) {
+          // document_id viene como number desde Postgres bigint
+          const documentIds: number[] = chatDocs.map((d) =>
+            Number(d.document_id),
           );
+          documentNames = chatDocs.map((d) => d.file_name);
 
-          if (dbError) {
-            console.error("Error RPC Supabase:", dbError.message);
-          } else if (searchData && searchData.length > 0) {
-            // Reranking + top 5
-            const reranked = await rerankChunks(lastUserMessage, searchData);
-            const topChunks = reranked.slice(0, 5);
-            sourcesFound = topChunks.length;
+          // ── 2. Embedding de la pregunta ──────────────────────────────────
+          const embedding = await getEmbedding(lastUserMessage);
 
-            contextText = topChunks
-              .map(
-                (c: any, i: number) =>
-                  `[Fragmento ${i + 1} — ID: ${c.id}]\n${c.content}`,
-              )
-              .join("\n\n---\n\n");
+          if (embedding.length > 0) {
+            // ── 3. Buscar en todos los documentos del chat ─────────────────
+            const { data: searchData, error: dbError } = await supabase.rpc(
+              "search_document_sections",
+              {
+                query_embedding: embedding,
+                match_threshold: 0.1,
+                match_count: Math.min(10 * documentIds.length, 30),
+                filter_document_ids: documentIds, // bigint[]
+              },
+            );
+
+            if (dbError) {
+              console.error("Error RPC:", dbError.message);
+            } else if (searchData && searchData.length > 0) {
+              // ── 4. Reranking global ────────────────────────────────────
+              const reranked = await rerankChunks(lastUserMessage, searchData);
+              const topChunks = reranked.slice(0, 8);
+              sourcesFound = topChunks.length;
+
+              // ── 5. Contexto con nombre del doc origen ──────────────────
+              const docNameMap: Record<number, string> = {};
+              chatDocs.forEach((d) => {
+                docNameMap[Number(d.document_id)] = d.file_name;
+              });
+
+              contextText = topChunks
+                .map((c: any, i: number) => {
+                  const docName =
+                    docNameMap[Number(c.document_id)] || "documento";
+                  return `[Fragmento ${i + 1} — de "${docName}"]\n${c.content}`;
+                })
+                .join("\n\n---\n\n");
+            }
           }
         }
       } catch (err) {
@@ -134,28 +157,31 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── System prompt ──
+    // ── System prompt ─────────────────────────────────────────────────────
+    const hasDocuments = documentNames.length > 0;
+    const docList = documentNames.map((n) => `• ${n}`).join("\n");
+
     const systemPrompt = `Eres DocuIA, un asistente de análisis de documentos inteligente y profesional.
 
-MODO DE OPERACIÓN:
+DOCUMENTOS ACTIVOS EN ESTE CHAT:
 ${
-  documentId
-    ? `Tienes acceso a un documento del usuario. ${
+  hasDocuments
+    ? `Tienes acceso a ${documentNames.length} documento(s):\n${docList}\n\n${
         sourcesFound > 0
-          ? `Se encontraron ${sourcesFound} fragmentos relevantes para responder.`
-          : "No se encontraron fragmentos específicos, pero puedes usar tu conocimiento general."
+          ? `Se encontraron ${sourcesFound} fragmentos relevantes para esta pregunta.`
+          : "No se encontraron fragmentos específicos. Puedes usar tu conocimiento general."
       }`
-    : "No hay documento activo. Responde usando tu conocimiento general."
+    : "No hay documentos activos. Responde usando tu conocimiento general."
 }
 
 INSTRUCCIONES:
-1. **Con contexto del documento**: Prioriza siempre la información del documento. Cita los fragmentos usando [Fragmento N].
-2. **Expansión con conocimiento externo**: Si el usuario pide sugerencias, mejoras o preguntas generales, usa también tu conocimiento global y menciona cuándo lo haces.
-3. **Transparencia**: Si aportas información que NO está en el documento, indícalo brevemente (ej: "Basado en mi conocimiento general…").
-4. **Formato**: Responde en español. Usa formato Markdown: negritas, listas y encabezados para estructurar mejor las respuestas largas. Sé conciso pero completo.
-5. **Tono**: Profesional, claro y directo. Evita introducciones largas.
+1. **Con contexto**: Prioriza la información de los documentos. Cita con [Fragmento N] e indica de qué documento viene si hay varios.
+2. **Múltiples documentos**: Si la respuesta involucra más de un documento, relaciónalo explícitamente.
+3. **Conocimiento externo**: Para preguntas generales usa tu conocimiento e indícalo con "Basado en mi conocimiento general…".
+4. **Formato**: Responde en español con Markdown. Usa negritas, listas y encabezados.
+5. **Tono**: Profesional, claro y directo.
 
-${contextText ? `CONTEXTO DEL DOCUMENTO:\n"""\n${contextText}\n"""` : ""}`;
+${contextText ? `CONTEXTO:\n"""\n${contextText}\n"""` : ""}`;
 
     const result = await streamText({
       model: openrouter.chat("openrouter/free"),
