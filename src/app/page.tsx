@@ -1,10 +1,10 @@
 "use client";
-import { useState, ChangeEvent, useEffect, useRef, FormEvent } from "react";
+import React, { useState, ChangeEvent, useEffect, useRef, FormEvent } from "react";
 import {
   Send, Loader2, Sparkles, CheckCircle2, Trash2, Plus,
   Paperclip, Copy, Edit2, Check, LogOut, Search, MessageSquare,
   Download, ChevronDown, FileText, ImageIcon, Mic, X, AlertCircle,
-  Globe, Link2,
+  Globe, Link2, ExternalLink,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import ReactMarkdown from "react-markdown";
@@ -17,6 +17,7 @@ interface ChatDocument { id: string; documentId: number; fileName: string; }
 interface ChatSession {
   id: string; title: string; documents: ChatDocument[];
   messages: Message[]; createdAt: number;
+  isPublic?: boolean; publicId?: string | null;
 }
 
 // ─── DocuIA Logo ──────────────────────────────────────────────────────────────
@@ -79,7 +80,7 @@ export function DocuIAIcon({ size = 28, isThinking = false }: { size?: number; i
 }
 
 // ─── Markdown ─────────────────────────────────────────────────────────────────
-const codeTheme: Record<string, React.CSSProperties> = {
+const codeTheme: React.CSSProperties | any = {
   'code[class*="language-"]': { color: "#e2e8f0", background: "none", fontFamily: "'JetBrains Mono', monospace", fontSize: "13px", lineHeight: "1.6" },
   comment: { color: "#4a5568", fontStyle: "italic" },
   keyword: { color: "#00e5ff", fontStyle: "italic" },
@@ -168,8 +169,11 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState("");
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [showShareToast, setShowShareToast] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string>("");
+  const [sessions, setSessions] = useState<ChatSession[]>([]); // <- ESTADO CORREGIDO
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -228,7 +232,7 @@ export default function Home() {
     setIsLoadingChats(true);
     try {
       const { data, error } = await supabase.from("chats")
-        .select("id, title, created_at, updated_at").eq("user_id", uid).order("updated_at", { ascending: false });
+        .select("id, title, created_at, updated_at, is_public, public_id").eq("user_id", uid).order("updated_at", { ascending: false });
       if (error) throw error;
       if (!data || data.length === 0) { await createNewChatInDB(uid); return; }
       const ids = data.map((c) => c.id);
@@ -240,7 +244,7 @@ export default function Home() {
       (msgRes.data || []).forEach((m) => { if (!msgMap[m.chat_id]) msgMap[m.chat_id] = []; msgMap[m.chat_id].push({ id: m.id, role: m.role, content: m.content }); });
       const docMap: Record<string, ChatDocument[]> = {};
       (docRes.data || []).forEach((d) => { if (!docMap[d.chat_id]) docMap[d.chat_id] = []; docMap[d.chat_id].push({ id: d.id, documentId: d.document_id, fileName: d.file_name }); });
-      const loaded = data.map((c) => ({ id: c.id, title: c.title, documents: docMap[c.id] || [], messages: msgMap[c.id] || [], createdAt: new Date(c.created_at).getTime() }));
+      const loaded = data.map((c) => ({ id: c.id, title: c.title, documents: docMap[c.id] || [], messages: msgMap[c.id] || [], createdAt: new Date(c.created_at).getTime(), isPublic: c.is_public || false, publicId: c.public_id || null }));
       setSessions(loaded);
       setActiveSessionId(loaded[0].id);
     } catch (err) { console.error("Error cargando chats:", err); }
@@ -297,6 +301,31 @@ export default function Home() {
   };
 
   const handleSignOut = async () => { await supabase.auth.signOut(); window.location.href = "/login"; };
+
+  const toggleShare = async () => {
+    if (!activeSession || !userId) return;
+    setShareLoading(true);
+    try {
+      const enable = !activeSession.isPublic;
+      const { data, error } = await supabase.rpc("toggle_chat_sharing", {
+        p_chat_id: activeSession.id,
+        p_user_id: userId,
+        p_enable: enable,
+      });
+      if (error) throw error;
+      const newPublicId = enable ? (data as string) : null;
+      setSessions((prev) => prev.map((s) =>
+        s.id === activeSessionId ? { ...s, isPublic: enable, publicId: newPublicId } : s
+      ));
+      if (enable && newPublicId) {
+        const link = `${window.location.origin}/share/${newPublicId}`;
+        await navigator.clipboard.writeText(link);
+        setShowShareToast(true);
+        setTimeout(() => setShowShareToast(false), 3000);
+      }
+    } catch (err) { console.error("Error al compartir:", err); }
+    finally { setShareLoading(false); }
+  };
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) || null;
   const filteredSessions = sessions.filter((s) => s.title.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -562,6 +591,7 @@ export default function Home() {
               <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 12, right: 12, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,.5)" }}>
                 {[
                   { icon: <Download size={14} />, label: "Exportar chat", action: exportChat },
+                  { icon: shareLoading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Link2 size={14} />, label: activeSession.isPublic ? "Desactivar link público" : "Compartir chat", action: toggleShare },
                   { icon: <FileText size={14} />, label: "Biblioteca de docs", action: () => window.location.href = "/biblioteca" },
                   { icon: <LogOut size={14} />, label: "Cerrar sesión", action: handleSignOut, danger: true },
                 ].map((item) => (
@@ -800,12 +830,21 @@ export default function Home() {
               </p>
             </div>
           </div>
-        </main >
+
+        </main>
       </div>
+
+      {/* Toast: link copiado */}
+      {showShareToast && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#111", border: "1px solid rgba(0,229,255,0.3)", borderRadius: 12, padding: "12px 20px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", zIndex: 100, animation: "fadeSlideUp .2s ease", whiteSpace: "nowrap" }}>
+          <Check size={14} color="#4ade80" />
+          <span style={{ fontSize: 13, color: "#f0f0f0" }}>Link copiado al portapapeles</span>
+          <a href={`/share/${activeSession?.publicId}`} target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 12, color: "#00e5ff", textDecoration: "none", marginLeft: 4, display: "flex", alignItems: "center", gap: 4 }}>
+            Ver <ExternalLink size={11} />
+          </a>
+        </div>
+      )}
     </>
   );
 }
-
-
-
-
