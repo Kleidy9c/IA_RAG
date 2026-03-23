@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Skan AI para tus documentos",
+  title: "DocSkan para tus documentos",
   description:
     "Analiza y chatea con tus PDFs, Word, archivos de texto y imagenes",
   icons: {
