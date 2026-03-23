@@ -9,9 +9,11 @@ const supabase = createClient(
 
 export async function GET(
   req: Request,
-  { params }: { params: { publicId: string } },
+  // ✅ 1. Cambiamos el tipo de params a Promise
+  { params }: { params: Promise<{ publicId: string }> },
 ) {
-  const { publicId } = params;
+  // ✅ 2. Añadimos 'await' para resolver la promesa
+  const { publicId } = await params;
 
   if (!publicId) {
     return NextResponse.json({ error: "ID no proporcionado" }, { status: 400 });
