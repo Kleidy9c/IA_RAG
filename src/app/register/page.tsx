@@ -137,7 +137,7 @@ export default function RegisterPage() {
               Crea tu cuenta
             </h1>
             <p style={{ color: "#666", fontSize: 14, marginTop: 6 }}>
-              Únete a Skan AI y analiza documentos con IA
+              Únete a DocSkan y analiza documentos con IA
             </p>
           </div>
 

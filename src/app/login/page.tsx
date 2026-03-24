@@ -108,7 +108,7 @@ export default function LoginPage() {
                 letterSpacing: "-0.4px",
               }}
             >
-              Bienvenido a Skan AI
+              Bienvenido a DocSkan
             </h1>
             <p style={{ color: "#666", fontSize: 14, marginTop: 6 }}>
               Ingresa a tu cuenta para continuar

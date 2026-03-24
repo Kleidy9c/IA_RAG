@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Cliente anónimo — sin cookies, acceso solo a datos públicos
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -9,10 +8,8 @@ const supabase = createClient(
 
 export async function GET(
   req: Request,
-  // ✅ 1. Cambiamos el tipo de params a Promise
   { params }: { params: Promise<{ publicId: string }> },
 ) {
-  // ✅ 2. Añadimos 'await' para resolver la promesa
   const { publicId } = await params;
 
   if (!publicId) {
